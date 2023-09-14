@@ -1,9 +1,16 @@
 import os
-import spacy
 import PyPDF2
+from bs4 import BeautifulSoup
+import docx
+import pytesseract
+from PIL import Image
+from pdf2image import convert_from_path
 import pandas as pd
 import uuid
 import pinecone
+import nltk
+from nltk.tokenize import word_tokenize
+nltk.download('punkt')
 from langchain.vectorstores import Pinecone
 # import nltk
 # nltk.download('punkt')
@@ -18,63 +25,79 @@ pinecone.init(api_key = PINECONE,
 model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2') 
 index="kk"
 
-def load_pdf(folder_path):
-    if os.path.exists(folder_path) and os.path.isdir(folder_path):
-      files = os.listdir(folder_path)
-      for file in files:
-          if file.endswith('.pdf'):
-              pdf_file_path = os.path.join(folder_path, file)
-              pdf_file = open(pdf_file_path, 'rb')
-              pdf_reader = PyPDF2.PdfReader(pdf_file)
-              pdf_text = ""
-              # Iterate through each page and extract text
-              for page_num in range(len(pdf_reader.pages)):
-                  page = pdf_reader.pages[page_num]
-                  pdf_text += page.extract_text()
-              pdf_file.close()
-              print(f"Text content of {file}:")
-              print(pdf_text)
-              return pdf_text
+def load_folder(file_path,name):
+    
+    # data = []
+    extracted_text = ""
 
-    else:
-       print("Folder not found or is not a directory")
-pdf_text=load_pdf("E:/test-main/travel.pdf")
+    file_extension = os.path.splitext(name)[1].lower()
+    if file_extension == '.pdf':
+        try:
+            with open(file_path, 'rb') as pdf_file:
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                for page_num in range(len(pdf_reader.pages)):
+                    page = pdf_reader.pages[page_num]
+                    extracted_text += page.extract_text()
 
-nlp=spacy.load("en_core_web_sm")
+        except PyPDF2.utils.PdfReadError:
+            try:
+                images=convert_from_path(file_path)
+                for image in images:
+                    text = pytesseract.image_to_string(image)
+                    extracted_text += text
+            except Exception as e:
+                return f"An error occurred during OCR: {str(e)}"
+
+    elif file_extension == '.html':
+        with open(file_path, 'r', encoding='utf-8') as html_file:
+            html_text = html_file.read()
+            soup = BeautifulSoup(html_text, 'html.parser')
+            extracted_text += soup.get_text()
+
+    elif file_extension == '.docx':
+        doc = docx.Document(file_path)
+        extracted_text = ""
+        for paragraph in doc.paragraphs:
+            extracted_text += paragraph.text
+
+    print("text_extracted")
+    return  extracted_text
 
 def create_text_chunks(text, chunk_size):
-    # Process the text using spaCy
-    doc = nlp(text)
-
+    # Process the text using spaC
+    words = word_tokenize(text)
     chunks = []
     current_chunk = []
     current_chunk_word_count = 0
-
-    for token in doc:
-        current_chunk.append(token.text)
+    
+    for word in words:
+        current_chunk.append(word)
         current_chunk_word_count += 1
-
+        
         if current_chunk_word_count >= chunk_size:
             chunks.append(" ".join(current_chunk))
             current_chunk = []
             current_chunk_word_count = 0
-
     if current_chunk:
         chunks.append(" ".join(current_chunk))
-
+    print("chunking done")
+    
     return chunks
 def get_embaddings(sentences):
     embeddings = model.encode(sentences)
     return embeddings
-tt=create_text_chunks(pdf_text, chunk_size=100)
-data = {"content":tt}
-df = pd.DataFrame(data)
-df['embeddings']=df['content'].apply(get_embaddings)
-index = pinecone.Index(index_name=index)
-for i in range(len(df)):
-  try:
-    vec_response=index.upsert(vectors=[{'id': str(uuid.uuid4()), "values":df['embeddings'][i].tolist(), "metadata": {'answer':df['content'][i]}}])
-  except:
-    continue
 
+def up_pine(path,file_name):
+   pdf_text=load_folder(path,file_name)
+   tt=create_text_chunks(pdf_text, chunk_size=100)
+   data = {"content":tt}
+   df = pd.DataFrame(data)
+   df['embeddings']=df['content'].apply(get_embaddings)
+   index = pinecone.Index(index_name="kk")
+   for i in range(len(df)):
+    try:
+       vec_response=index.upsert(vectors=[{'id': str(uuid.uuid4()), "values":df['embeddings'][i].tolist(), "metadata": {'answer':df['content'][i]}}])
+    except:
+       continue
+   print("up_pine")
 
