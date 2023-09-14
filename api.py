@@ -2,8 +2,7 @@ from flask import Flask, render_template,jsonify,request
 from flask_cors import CORS
 from ok import ans_llm
 import os, gdown
-
-#from upload_pinecone import up_pine
+from upload_pinecone import up_pine
 
 app = Flask(__name__)
 CORS(app)
@@ -29,7 +28,13 @@ def uploader():
                             pptx = os.path.join(dir,file)
                             slides.append(pptx)
                             file_names.append(file)
-    
+
+            for name, path in zip(file_names, slides):
+
+                up_pine(path,name)
+            
+            return jsonify({"Response":"Success"}), 200
+
         except Exception as e:
             return jsonify({"error": str(e)}), 500
         
