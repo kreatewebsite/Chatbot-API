@@ -8,6 +8,9 @@ auto-gptq[llama]
 transformers
 spacy
 PyPDF2
+Flask
+Flask-Cors
+gdown
 
 
 
