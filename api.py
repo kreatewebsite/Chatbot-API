@@ -1,17 +1,12 @@
 from flask import Flask, render_template,jsonify,request
-from werkzeug.utils import secure_filename
+from flask_cors import CORS
 from ok import ans_llm
-import os
+import os, gdown
+
 #from upload_pinecone import up_pine
-from wtforms.validators import InputRequired
-UPLOAD_FOLDER="E:\test-main\save"
-ALLOWED_EXTENSION=set(['pdf','html','doc'])
 
-def allowed_filename(filename):
-     return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSION
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
+CORS(app)
 
 @app.route('/')
 def main():
@@ -19,16 +14,25 @@ def main():
 
 @app.route("/upload" , methods=['GET', 'POST'])
 def uploader():
-    if 'file' in request.files:
-        return jsonify({'error': 'file not provided'}),400
-    file=request.files['file']
-    if file.filename=='':
-        return jsonify({'error': 'no file selected'}),400
-    if file and allowed_filename(file.filename):
-        filename = secure_filename(file.filename)
-
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'],filename))
-    return jsonify({'msg': 'file succesfully'}),400
+    if request.method == 'POST':
+        file = request.form.get('url')
+        
+        slides = []
+        file_names = []
+        try:
+            if url.split('/')[-1] == '?usp=sharing':
+                url= url.replace('?usp=sharing','')
+            gdown.download_folder(url)
+            for dir,_,files in os.walk(os.getcwd()):
+                for file in files :
+                    if file.lower().endswith(('.pdf','.html','docx')):
+                            pptx = os.path.join(dir,file)
+                            slides.append(pptx)
+                            file_names.append(file)
+    
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        
 
 @app.route("/chatbot/<string:input>")
 def response(input):
